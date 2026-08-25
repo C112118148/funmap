@@ -47,15 +47,28 @@ def fetch_feed(limit: int) -> list[dict]:
     import time
     last_err = None
     for attempt in range(3):
-        r = httpx.get(ATOM_URL, headers=HEADERS, timeout=30, follow_redirects=True)
+        try:
+            r = httpx.get(ATOM_URL, headers=HEADERS, timeout=30, follow_redirects=True)
+        except httpx.RequestError as e:
+            last_err = str(e)
+            print(f"  feed fetch attempt {attempt + 1} failed ({last_err}), retrying...")
+            time.sleep(10 * (attempt + 1))
+            continue
         if r.status_code == 200:
             break
         last_err = f"HTTP {r.status_code}"
         print(f"  feed fetch attempt {attempt + 1} failed ({last_err}), retrying...")
         time.sleep(10 * (attempt + 1))
     else:
-        raise RuntimeError(f"KKTIX feed unavailable after 3 attempts: {last_err}")
-    root = ET.fromstring(r.text)
+        # KKTIX is frequently blocked by Cloudflare for GitHub-hosted runners.
+        # Treat this as a transient data-source outage instead of failing the job.
+        print(f"  feed unavailable after 3 attempts ({last_err}); skipping this run.")
+        return []
+    try:
+        root = ET.fromstring(r.text)
+    except ET.ParseError:
+        print("  feed response is not valid Atom XML; skipping this run.")
+        return []
     entries = []
     for e in root.findall("a:entry", NS)[:limit]:
         content = e.find("a:content", NS)

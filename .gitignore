@@ -8,6 +8,11 @@ node_modules/
 .next/
 out/
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Misc
 *.log
 .DS_Store

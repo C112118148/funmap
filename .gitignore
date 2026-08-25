@@ -1,0 +1,14 @@
+# Secrets
+.env
+.env.local
+.env*.local
+
+# Dependencies
+node_modules/
+.next/
+out/
+
+# Misc
+*.log
+.DS_Store
+.vercel

@@ -1,0 +1,48 @@
+name: Scrape events
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 min (PRD 2.1 Tier 2 interval)
+  workflow_dispatch: {}       # manual run button
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  kktix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install httpx pydantic python-dotenv supabase
+
+      - name: Run KKTIX scraper
+        working-directory: scraper
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -o pipefail
+          python kktix_scraper.py --limit 20 2>&1 | tee /tmp/scraper.log
+          echo "SCRAPER_SUMMARY<<EOF" >> "$GITHUB_ENV"
+          tail -5 /tmp/scraper.log >> "$GITHUB_ENV"
+          echo "EOF" >> "$GITHUB_ENV"
+
+      - name: Report failure to step summary
+        if: failure()
+        run: |
+          echo "## KKTIX scrape failed :x:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -30 /tmp/scraper.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

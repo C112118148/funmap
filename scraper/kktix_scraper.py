@@ -28,16 +28,33 @@ load_dotenv(Path(__file__).resolve().parent.parent / "web" / ".env.local")
 os.environ.setdefault("NEXT_PUBLIC_SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
 
 ATOM_URL = "https://kktix.com/events.atom"
-UA = "LocalPulseBot/1.0 (+https://local-pulse.example; contact@example.com)"
+# Cloudflare on KKTIX blocks datacenter IPs (e.g. GitHub Actions runners) that
+# send bot-looking requests. Browser-like headers + retries pass most of the time.
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+HEADERS = {
+    "User-Agent": UA,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+}
 NS = {"a": "http://www.w3.org/2005/Atom"}
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
 def fetch_feed(limit: int) -> list[dict]:
-    """Fetch KKTIX atom feed and return raw entries."""
-    r = httpx.get(ATOM_URL, headers={"User-Agent": UA}, timeout=30, follow_redirects=True)
-    r.raise_for_status()
+    """Fetch KKTIX atom feed with retries (Cloudflare may 403 datacenter IPs)."""
+    import time
+    last_err = None
+    for attempt in range(3):
+        r = httpx.get(ATOM_URL, headers=HEADERS, timeout=30, follow_redirects=True)
+        if r.status_code == 200:
+            break
+        last_err = f"HTTP {r.status_code}"
+        print(f"  feed fetch attempt {attempt + 1} failed ({last_err}), retrying...")
+        time.sleep(10 * (attempt + 1))
+    else:
+        raise RuntimeError(f"KKTIX feed unavailable after 3 attempts: {last_err}")
     root = ET.fromstring(r.text)
     entries = []
     for e in root.findall("a:entry", NS)[:limit]:

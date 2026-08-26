@@ -46,6 +46,7 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           tail -30 /tmp/scraper.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+        continue-on-error: true
 
   gov-exhibitions:
     runs-on: ubuntu-latest

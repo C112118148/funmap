@@ -72,9 +72,7 @@ def fetch_events(limit: int) -> list[dict]:
             # event.culture.tw path is not a valid public page format.
             url = (item.get("sourceWebPromote") or "").strip()
             if not re.match(r"^https?://", url):
-                # fall back to the iCulture search page for this title
-                from urllib.parse import quote
-                url = f"https://cloud.culture.tw/frontsite/trans/SearchShowAction.do?method=doFindByTypeJ&keyword={quote(item.get('title', ''))}"
+                url = "https://cloud.culture.tw/frontsite/inquiry/eventInquiryAction.do?method=showEventList&type=6"
 
             out.append({
                 "title": (item.get("title") or "").strip()[:100],

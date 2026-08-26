@@ -68,11 +68,12 @@ def fetch_events(limit: int) -> list[dict]:
             if price:
                 summary += f"｜票價：{price}"
 
-            # Prefer the source site's own link (sourceWebPromote); the UID-based
-            # event.culture.tw path is not a valid public page format.
+            # Prefer the source site's own link; otherwise build the iCulture
+            # detail page (verified pattern: showEventDetail&type=6&uid=...).
             url = (item.get("sourceWebPromote") or "").strip()
             if not re.match(r"^https?://", url):
-                url = "https://cloud.culture.tw/frontsite/inquiry/eventInquiryAction.do?method=showEventList&type=6"
+                uid = item.get("UID", "")
+                url = f"https://cloud.culture.tw/frontsite/inquiry/eventInquiryAction.do?method=showEventDetail&type=6&uid={uid}"
 
             out.append({
                 "title": (item.get("title") or "").strip()[:100],

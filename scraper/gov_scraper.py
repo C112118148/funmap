@@ -68,6 +68,14 @@ def fetch_events(limit: int) -> list[dict]:
             if price:
                 summary += f"｜票價：{price}"
 
+            # Prefer the source site's own link (sourceWebPromote); the UID-based
+            # event.culture.tw path is not a valid public page format.
+            url = (item.get("sourceWebPromote") or "").strip()
+            if not re.match(r"^https?://", url):
+                # fall back to the iCulture search page for this title
+                from urllib.parse import quote
+                url = f"https://cloud.culture.tw/frontsite/trans/SearchShowAction.do?method=doFindByTypeJ&keyword={quote(item.get('title', ''))}"
+
             out.append({
                 "title": (item.get("title") or "").strip()[:100],
                 "summary": summary,
@@ -76,7 +84,7 @@ def fetch_events(limit: int) -> list[dict]:
                 "start_time": start.isoformat(),
                 "end_time": end.isoformat(),
                 "is_verified": True,
-                "source_url": f"https://event.culture.tw/mocweb/reg/{item.get('UID', '')}",
+                "source_url": url,
             })
             if len(out) >= limit:
                 return out

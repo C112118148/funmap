@@ -1,94 +1,48 @@
 name: Scrape events
-
-on:
+true:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 min (PRD 2.1 Tier 2 interval)
-  workflow_dispatch: {}       # manual run button
-
+  - cron: '*/30 * * * *'
+  workflow_dispatch: {}
 permissions:
   contents: read
-
 concurrency:
   group: scrape
   cancel-in-progress: false
-
 jobs:
-  kktix:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install httpx pydantic python-dotenv supabase
-
-      - name: Run KKTIX scraper
-        working-directory: scraper
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          set -o pipefail
-          python kktix_scraper.py --limit 20 2>&1 | tee /tmp/scraper.log
-          echo "SCRAPER_SUMMARY<<EOF" >> "$GITHUB_ENV"
-          tail -5 /tmp/scraper.log >> "$GITHUB_ENV"
-          echo "EOF" >> "$GITHUB_ENV"
-
-      - name: Report failure to step summary
-        if: failure()
-        run: |
-          echo "## KKTIX scrape failed :x:" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -30 /tmp/scraper.log >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-        continue-on-error: true
-
   gov-exhibitions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install httpx pydantic python-dotenv supabase
-
-      - name: Run gov open-data scraper
-        working-directory: scraper
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python gov_scraper.py --limit 80
-
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install httpx pydantic python-dotenv supabase
+    - name: Run gov open-data scraper
+      working-directory: scraper
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python gov_scraper.py --limit 80
   cwa-breaker:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: pip install httpx pydantic python-dotenv supabase
-
-      - name: Check CWA typhoon warnings
-        working-directory: scraper
-        env:
-          CWA_API_KEY: ${{ secrets.CWA_API_KEY }}
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python cwa_breaker.py
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install httpx pydantic python-dotenv supabase
+    - name: Check CWA typhoon warnings
+      working-directory: scraper
+      env:
+        CWA_API_KEY: ${{ secrets.CWA_API_KEY }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python cwa_breaker.py

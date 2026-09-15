@@ -1,0 +1,92 @@
+name: Scrape ticketing sites
+# Hourly LLM batch, separate from the */30 no-LLM workflow (scrape.yml).
+# Ticketing scrapers share one Gemini free-tier quota: ~50 calls/run keeps
+# 429-retry+skip degradation rare. Detail pages need residential IPs, so
+# kktix/indievox enrich best on a self-hosted runner; cloud runs degrade
+# to graceful skip without failing the workflow.
+on:
+  schedule:
+  - cron: '7 * * * *'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: scrape-ticketing
+  cancel-in-progress: false
+jobs:
+  kktix-ticketing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install "httpx[http2]" pydantic python-dotenv supabase
+    - name: Run KKTIX scraper (detail enrichment + Gemini geocode)
+      working-directory: scraper
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python kktix_scraper.py --limit 10
+  tixcraft-listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install "httpx[http2]" pydantic python-dotenv supabase
+    - name: Run TixCraft listing scraper (venue-grouped geocode)
+      working-directory: scraper
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python tixcraft_scraper.py --limit 30
+  indievox-listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install "httpx[http2]" pydantic python-dotenv supabase
+    - name: Run IndieVox scraper (detail venue+address, exact times)
+      working-directory: scraper
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python indievox_scraper.py --limit 15
+  utk-listing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: main
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: pip install "httpx[http2]" pydantic python-dotenv supabase
+    - name: Run UDN+KHAM scrapers (UTK backend family)
+      working-directory: scraper
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: python utk_scraper.py --limit 15

@@ -166,6 +166,12 @@ def geocode_with_gemini(raw_text: str) -> dict | None:
                 print(f"      rate-limited, retry in {wait}s...", flush=True)
                 time.sleep(wait)
                 continue
+            if r.status_code in (503, 500):
+                import time
+                wait = 10 * (attempt + 1)
+                print(f"      backend busy, retry in {wait}s...", flush=True)
+                time.sleep(wait)
+                continue
             r.raise_for_status()
             break
         except httpx.HTTPStatusError:

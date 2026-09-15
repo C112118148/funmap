@@ -43,20 +43,48 @@ NS = {"a": "http://www.w3.org/2005/Atom"}
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
+def _try_fetch(client: httpx.Client) -> httpx.Response | None:
+    try:
+        return client.get(ATOM_URL, headers=HEADERS, timeout=30,
+                          follow_redirects=True)
+    except Exception as e:
+        print(f"  feed fetch transport error ({type(e).__name__}), retrying...")
+        return None
+
+
 def fetch_feed(limit: int) -> list[dict]:
-    """Fetch KKTIX atom feed with retries (Cloudflare may 403 datacenter IPs)."""
+    """Fetch KKTIX atom feed. Cloudflare 403s datacenter IPs (GitHub Actions)
+    that send bot-looking requests. Mitigations, in order:
+      1. HTTP/2 client (browser-like wire fingerprint) first,
+      2. HTTP/1.1 fallback, 3. spaced retries.
+    Returns [] instead of raising when the feed is unreachable: a scheduled
+    CI run must skip gracefully, not go red on a transient WAF block."""
     import time
-    last_err = None
-    for attempt in range(3):
-        r = httpx.get(ATOM_URL, headers=HEADERS, timeout=30, follow_redirects=True)
-        if r.status_code == 200:
-            break
-        last_err = f"HTTP {r.status_code}"
-        print(f"  feed fetch attempt {attempt + 1} failed ({last_err}), retrying...")
-        time.sleep(10 * (attempt + 1))
-    else:
-        raise RuntimeError(f"KKTIX feed unavailable after 3 attempts: {last_err}")
-    root = ET.fromstring(r.text)
+    clients: list[httpx.Client] = []
+    try:
+        clients.append(httpx.Client(http2=True))   # needs httpx[http2]
+    except Exception:
+        pass
+    clients.append(httpx.Client())
+    try:
+        last_err = "unknown"
+        for client in clients:
+            for attempt in range(3):
+                r = _try_fetch(client)
+                if r is not None and r.status_code == 200:
+                    return _parse_feed(r.text, limit)
+                last_err = f"HTTP {r.status_code}" if r is not None else "transport"
+                print(f"  feed fetch attempt failed ({last_err}), retrying...")
+                time.sleep(10 * (attempt + 1))
+        print(f"WARNING: KKTIX feed unavailable after retries ({last_err}); skipping run.")
+        return []
+    finally:
+        for c in clients:
+            c.close()
+
+
+def _parse_feed(text: str, limit: int) -> list[dict]:
+    root = ET.fromstring(text)
     entries = []
     for e in root.findall("a:entry", NS)[:limit]:
         content = e.find("a:content", NS)
@@ -136,6 +164,12 @@ def geocode_with_gemini(raw_text: str) -> dict | None:
                 import time
                 wait = 5 * (attempt + 1)
                 print(f"      rate-limited, retry in {wait}s...", flush=True)
+                time.sleep(wait)
+                continue
+            if r.status_code in (503, 500):
+                import time
+                wait = 10 * (attempt + 1)
+                print(f"      backend busy, retry in {wait}s...", flush=True)
                 time.sleep(wait)
                 continue
             r.raise_for_status()
@@ -221,6 +255,9 @@ def main():
 
     print(f"Fetching KKTIX feed (limit={args.limit})...")
     entries = fetch_feed(args.limit)
+    if not entries:
+        print("DONE: feed unreachable, nothing to do (exit 0, no failure).")
+        return
     print(f"Got {len(entries)} entries")
 
     extracted: list[tuple[ExtractedEvent, str]] = []
